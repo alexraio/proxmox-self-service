@@ -1,0 +1,51 @@
+version: "3.9"
+
+services:
+
+  # ── FastAPI Backend ──────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: proxmox-portal-backend
+    restart: unless-stopped
+    env_file: ./backend/.env
+    volumes:
+      - db-data:/app         # persist SQLite DB
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ── Background Worker (cronjob) ────────────────────────────────────────────
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: proxmox-portal-worker
+    restart: unless-stopped
+    env_file: ./backend/.env
+    volumes:
+      - db-data:/app         # share the same SQLite DB
+    command: ["python", "-m", "cronjob.worker"]
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # ── React Frontend (nginx) ────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: proxmox-portal-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  db-data:

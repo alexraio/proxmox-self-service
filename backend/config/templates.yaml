@@ -1,0 +1,69 @@
+# Proxmox Self-Service Portal — Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+# Questo file viene riletto ad ogni richiesta API: le modifiche sono operative
+# IMMEDIATAMENTE, senza dover riavviare il backend.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Taglie hardware ──────────────────────────────────────────────────────────
+# Definisce le tre taglie selezionabili dal portale.
+# I valori di vcpu, memory_mb e disk_gb vengono applicati al clone dopo la
+# creazione (override rispetto al template).
+sizes:
+  tiny:
+    vcpu: 1
+    memory_mb: 1024
+    disk_gb: 10
+  medium:
+    vcpu: 2
+    memory_mb: 4096
+    disk_gb: 40
+  high:
+    vcpu: 4
+    memory_mb: 8192
+    disk_gb: 80
+
+# ── Template VMIDs ────────────────────────────────────────────────────────────
+# VMID dei template Proxmox da cui clonare.
+# Sostituisci con i VMID reali presenti nel tuo cluster.
+templates:
+  vm:
+    tiny: 103
+    medium: 104
+    high: 105
+  ct:
+    tiny: 100
+    medium: 100
+    high: 102
+
+# ── Impostazioni cluster Proxmox ──────────────────────────────────────────────
+proxmox:
+  # Nome del nodo di destinazione (deve corrispondere esattamente al nome
+  # mostrato in Proxmox → Server View).
+  default_node: "pve-nad9"
+
+  # ── Storage ────────────────────────────────────────────────────────────────
+  # Lista degli storage disponibili nel portale.
+  # - id:    nome dello storage come appare in Proxmox (es. local-lvm)
+  # - label: testo mostrato all'utente nel dropdown
+  # Aggiungi o rimuovi voci per controllare cosa è selezionabile.
+  storages:
+    - id: "local-lvm"
+      label: "Local LVM"
+    - id: "data-thin"
+      label: "Data Thin"
+
+  # ── Bridge di rete ─────────────────────────────────────────────────────────
+  # Lista dei bridge disponibili nel portale.
+  # - id:    bridge Proxmox. Usa "vmbr0" per bridge semplice,
+  #          oppure "vmbr0.50" per bridge=vmbr0 + VLAN tag=50.
+  #          Il suffisso numerico viene automaticamente convertito in tag VLAN.
+  # - label: testo mostrato all'utente nel dropdown
+  # - color: colore del badge (primary | warning | success | danger)
+  # Aggiungi o rimuovi voci per controllare cosa è selezionabile.
+  bridges:
+    - id: "vmbr0"
+      label: "vmbr0 — Rete Standard"
+      color: "primary"
+    - id: "vmbr0.50"
+      label: "vmbr0.50 — VLAN 50"
+      color: "warning"
