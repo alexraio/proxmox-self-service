@@ -20,8 +20,8 @@ RUN printf 'server {\n\
     location / {\n\
         try_files $uri $uri/ /index.html;\n\
     }\n\
-    location /api/ {\n\
-        proxy_pass http://backend:8000/;\n\
+    location ~ ^/(auth|machines|config|health) {\n\
+        proxy_pass http://backend:8000;\n\
     }\n\
 }\n' > /etc/nginx/conf.d/default.conf
 

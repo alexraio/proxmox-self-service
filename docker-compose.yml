@@ -12,6 +12,7 @@ services:
     env_file: ./backend/.env
     volumes:
       - db-data:/app         # persist SQLite DB
+      - ./backend/config/templates.yaml:/app/config/templates.yaml:ro
     ports:
       - "8000:8000"
     healthcheck:
@@ -30,6 +31,7 @@ services:
     env_file: ./backend/.env
     volumes:
       - db-data:/app         # share the same SQLite DB
+      - ./backend/config/templates.yaml:/app/config/templates.yaml:ro
     command: ["python", "-m", "cronjob.worker"]
     depends_on:
       backend:
