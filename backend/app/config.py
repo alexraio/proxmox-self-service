@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     # ── CORS ──────────────────────────────────────────────────────────────────
     cors_origins: List[str] = ["http://localhost:3000", "http://localhost:5173"]
 
+    # ── Worker ────────────────────────────────────────────────────────────────
+    worker_interval_seconds: int = 60
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

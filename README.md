@@ -50,6 +50,8 @@ docker compose up --build
 **Backend:**
 ```bash
 cd backend
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env      # fill in your credentials
 uvicorn app.main:app --reload
@@ -58,6 +60,7 @@ uvicorn app.main:app --reload
 **Worker (separate terminal):**
 ```bash
 cd backend
+source .venv/bin/activate
 python -m cronjob.worker
 ```
 
@@ -66,6 +69,18 @@ python -m cronjob.worker
 cd frontend
 npm install
 npm run dev               # http://localhost:5173
+```
+
+### 5. Troubleshooting: Restarting local services
+
+If you need to kill stuck processes to cleanly restart the application locally, you can forcefully free the used ports:
+
+```bash
+# Kill the FastAPI Backend (port 8000)
+lsof -ti :8000 | xargs kill -9
+
+# Kill the React Frontend (port 5173)
+lsof -ti :5173 | xargs kill -9
 ```
 
 ## Configuration (`backend/config/templates.yaml`)

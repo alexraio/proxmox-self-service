@@ -27,13 +27,13 @@ sizes:
 # Sostituisci con i VMID reali presenti nel tuo cluster.
 templates:
   vm:
-    tiny: 103
-    medium: 104
-    high: 105
+    tiny: 9000
+    medium: 9000
+    high: 9000
   ct:
     tiny: 100
     medium: 100
-    high: 102
+    high: 100
 
 # ── Impostazioni cluster Proxmox ──────────────────────────────────────────────
 proxmox:
