@@ -199,33 +199,75 @@ def _configure_ct_network(
 def _apply_size_vm(
     proxmox: ProxmoxAPI, node: str, vmid: int, size_cfg: dict
 ) -> None:
-    """Apply CPU and RAM configuration to a QEMU VM.
+    """Apply CPU, RAM, and disk configuration to a QEMU VM.
 
     Args:
         proxmox: Authenticated ProxmoxAPI client.
         node: Proxmox node name.
         vmid: Target VM VMID.
-        size_cfg: Size dict with ``vcpu`` and ``memory_mb`` keys.
+        size_cfg: Size dict with ``vcpu``, ``memory_mb``, and ``disk_gb`` keys.
     """
+    # 1. Update CPU and RAM
     proxmox.nodes(node).qemu(vmid).config.put(
         cores=size_cfg["vcpu"], memory=size_cfg["memory_mb"]
     )
+    
+    # 2. Update Disk size
+    try:
+        config = proxmox.nodes(node).qemu(vmid).config.get()
+        disk_to_resize = None
+        
+        # Try to find the boot disk from the 'boot' parameter
+        boot_param = config.get("boot", "")
+        if "order=" in boot_param:
+            order_list = boot_param.replace("order=", "").split(";")
+            for item in order_list:
+                if any(item.startswith(prefix) for prefix in ["scsi", "virtio", "sata", "ide"]):
+                    disk_to_resize = item
+                    break
+        
+        # Fallback: check which disk exists
+        if not disk_to_resize:
+            for prefix in ["scsi0", "virtio0", "sata0", "ide0"]:
+                if prefix in config:
+                    disk_to_resize = prefix
+                    break
+
+        if disk_to_resize:
+            logger.info("VM %d — resizing disk %s to %dG", vmid, disk_to_resize, size_cfg["disk_gb"])
+            proxmox.nodes(node).qemu(vmid).resize.put(
+                disk=disk_to_resize, size=f"{size_cfg['disk_gb']}G"
+            )
+        else:
+            logger.warning("VM %d — could not determine which disk to resize", vmid)
+    except Exception as exc:
+        logger.warning("VM %d — failed to resize disk: %s", vmid, exc)
 
 
 def _apply_size_ct(
     proxmox: ProxmoxAPI, node: str, vmid: int, size_cfg: dict
 ) -> None:
-    """Apply CPU and RAM configuration to an LXC container.
+    """Apply CPU, RAM, and disk configuration to an LXC container.
 
     Args:
         proxmox: Authenticated ProxmoxAPI client.
         node: Proxmox node name.
         vmid: Target container VMID.
-        size_cfg: Size dict with ``vcpu`` and ``memory_mb`` keys.
+        size_cfg: Size dict with ``vcpu``, ``memory_mb``, and ``disk_gb`` keys.
     """
+    # 1. Update CPU and RAM
     proxmox.nodes(node).lxc(vmid).config.put(
         cores=size_cfg["vcpu"], memory=size_cfg["memory_mb"]
     )
+    
+    # 2. Update Disk size
+    try:
+        logger.info("CT %d — resizing rootfs to %dG", vmid, size_cfg["disk_gb"])
+        proxmox.nodes(node).lxc(vmid).resize.put(
+            disk="rootfs", size=f"{size_cfg['disk_gb']}G"
+        )
+    except Exception as exc:
+        logger.warning("CT %d — failed to resize rootfs: %s", vmid, exc)
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
