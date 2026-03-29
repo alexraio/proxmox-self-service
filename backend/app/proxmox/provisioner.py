@@ -359,15 +359,15 @@ def provision_machine(
 
     if resource_type == "vm":
         _clone_vm(proxmox, target_node, template_vmid, new_vmid, name, storage)
-        _apply_size_vm(proxmox, target_node, new_vmid, size_cfg)
         _configure_vm_network(proxmox, target_node, new_vmid, bridge)
+        _apply_size_vm(proxmox, target_node, new_vmid, size_cfg)
         upid = proxmox.nodes(target_node).qemu(new_vmid).status.start.post()
         wait_task(proxmox, target_node, upid)
 
     elif resource_type == "ct":
         _clone_ct(proxmox, target_node, template_vmid, new_vmid, name, storage)
-        _apply_size_ct(proxmox, target_node, new_vmid, size_cfg)
         _configure_ct_network(proxmox, target_node, new_vmid, bridge)
+        _apply_size_ct(proxmox, target_node, new_vmid, size_cfg)
         upid = proxmox.nodes(target_node).lxc(new_vmid).status.start.post()
         wait_task(proxmox, target_node, upid)
 
