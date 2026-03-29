@@ -26,6 +26,7 @@ def get_proxmox_client() -> ProxmoxAPI:
         token_name=settings.proxmox_token_name,
         token_value=settings.proxmox_token_value,
         verify_ssl=settings.proxmox_verify_ssl,
+        timeout=60,
     )
 
 
