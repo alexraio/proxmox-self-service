@@ -12,15 +12,15 @@ sizes:
   tiny:
     vcpu: 1
     memory_mb: 1024
-    disk_gb: 10
+    disk_gb: 80
   medium:
     vcpu: 2
-    memory_mb: 4096
-    disk_gb: 40
+    memory_mb: 2048
+    disk_gb: 90
   high:
     vcpu: 4
-    memory_mb: 8192
-    disk_gb: 80
+    memory_mb: 4096
+    disk_gb: 100
 
 # ── Template VMIDs ────────────────────────────────────────────────────────────
 # VMID dei template Proxmox da cui clonare.

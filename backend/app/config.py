@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     access_token_expire_hours: int = 24
 
     # ── Database ──────────────────────────────────────────────────────────────
-    database_url: str = "sqlite:///./proxmox_portal.db"
+    database_url: str = "sqlite:///./data/proxmox_portal.db"
 
     # ── Proxmox ───────────────────────────────────────────────────────────────
     proxmox_host: str = Field(..., description="Proxmox VE hostname or IP address")

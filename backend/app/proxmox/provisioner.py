@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Tuple
 
 from proxmoxer import ProxmoxAPI
@@ -199,33 +200,114 @@ def _configure_ct_network(
 def _apply_size_vm(
     proxmox: ProxmoxAPI, node: str, vmid: int, size_cfg: dict
 ) -> None:
-    """Apply CPU and RAM configuration to a QEMU VM.
+    """Apply CPU, RAM, and disk configuration to a QEMU VM.
 
     Args:
         proxmox: Authenticated ProxmoxAPI client.
         node: Proxmox node name.
         vmid: Target VM VMID.
-        size_cfg: Size dict with ``vcpu`` and ``memory_mb`` keys.
+        size_cfg: Size dict with ``vcpu``, ``memory_mb``, and ``disk_gb`` keys.
     """
+    # 1. Update CPU and RAM
     proxmox.nodes(node).qemu(vmid).config.put(
         cores=size_cfg["vcpu"], memory=size_cfg["memory_mb"]
     )
+    
+    # 2. Update Disk size
+    try:
+        config = proxmox.nodes(node).qemu(vmid).config.get()
+        disk_to_resize = None
+        
+        # Try to find the boot disk from the 'boot' parameter
+        boot_param = config.get("boot", "")
+        if "order=" in boot_param:
+            order_list = boot_param.replace("order=", "").split(";")
+            for item in order_list:
+                if any(item.startswith(prefix) for prefix in ["scsi", "virtio", "sata", "ide"]):
+                    disk_to_resize = item
+                    break
+        
+        # Fallback: check which disk exists
+        if not disk_to_resize:
+            for prefix in ["scsi0", "virtio0", "sata0", "ide0"]:
+                if prefix in config:
+                    disk_to_resize = prefix
+                    break
+
+        if disk_to_resize:
+            disk_config = config.get(disk_to_resize, "")
+            match = re.search(r'size=(\d+)G', disk_config)
+            target_gb = size_cfg["disk_gb"]
+            
+            if match:
+                current_gb = int(match.group(1))
+                diff_gb = target_gb - current_gb
+                if diff_gb > 0:
+                    logger.info("VM %d — resizing disk %s from %dG to %dG (+%dG)", vmid, disk_to_resize, current_gb, target_gb, diff_gb)
+                    result = proxmox.nodes(node).qemu(vmid).resize.put(
+                        disk=disk_to_resize, size=f"+{diff_gb}G"
+                    )
+                    if isinstance(result, str) and result.startswith("UPID:"):
+                        wait_task(proxmox, node, result)
+                else:
+                    logger.info("VM %d — disk %s already %dG (target %dG), skipped", vmid, disk_to_resize, current_gb, target_gb)
+            else:
+                logger.info("VM %d — resizing disk %s to absolute %dG", vmid, disk_to_resize, target_gb)
+                result = proxmox.nodes(node).qemu(vmid).resize.put(
+                    disk=disk_to_resize, size=f"{target_gb}G"
+                )
+                if isinstance(result, str) and result.startswith("UPID:"):
+                    wait_task(proxmox, node, result)
+        else:
+            logger.warning("VM %d — could not determine which disk to resize", vmid)
+    except Exception as exc:
+        logger.warning("VM %d — failed to resize disk: %s", vmid, exc)
 
 
 def _apply_size_ct(
     proxmox: ProxmoxAPI, node: str, vmid: int, size_cfg: dict
 ) -> None:
-    """Apply CPU and RAM configuration to an LXC container.
+    """Apply CPU, RAM, and disk configuration to an LXC container.
 
     Args:
         proxmox: Authenticated ProxmoxAPI client.
         node: Proxmox node name.
         vmid: Target container VMID.
-        size_cfg: Size dict with ``vcpu`` and ``memory_mb`` keys.
+        size_cfg: Size dict with ``vcpu``, ``memory_mb``, and ``disk_gb`` keys.
     """
+    # 1. Update CPU and RAM
     proxmox.nodes(node).lxc(vmid).config.put(
         cores=size_cfg["vcpu"], memory=size_cfg["memory_mb"]
     )
+    
+    # 2. Update Disk size
+    try:
+        config = proxmox.nodes(node).lxc(vmid).config.get()
+        disk_config = config.get("rootfs", "")
+        match = re.search(r'size=(\d+)G', disk_config)
+        target_gb = size_cfg["disk_gb"]
+        
+        if match:
+            current_gb = int(match.group(1))
+            diff_gb = target_gb - current_gb
+            if diff_gb > 0:
+                logger.info("CT %d — resizing rootfs from %dG to %dG (+%dG)", vmid, current_gb, target_gb, diff_gb)
+                result = proxmox.nodes(node).lxc(vmid).resize.put(
+                    disk="rootfs", size=f"+{diff_gb}G"
+                )
+                if isinstance(result, str) and result.startswith("UPID:"):
+                    wait_task(proxmox, node, result)
+            else:
+                logger.info("CT %d — rootfs already %dG (target %dG), skipped", vmid, current_gb, target_gb)
+        else:
+            logger.info("CT %d — resizing rootfs to absolute %dG", vmid, target_gb)
+            result = proxmox.nodes(node).lxc(vmid).resize.put(
+                disk="rootfs", size=f"{target_gb}G"
+            )
+            if isinstance(result, str) and result.startswith("UPID:"):
+                wait_task(proxmox, node, result)
+    except Exception as exc:
+        logger.warning("CT %d — failed to resize rootfs: %s", vmid, exc)
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -277,15 +359,15 @@ def provision_machine(
 
     if resource_type == "vm":
         _clone_vm(proxmox, target_node, template_vmid, new_vmid, name, storage)
-        _apply_size_vm(proxmox, target_node, new_vmid, size_cfg)
         _configure_vm_network(proxmox, target_node, new_vmid, bridge)
+        _apply_size_vm(proxmox, target_node, new_vmid, size_cfg)
         upid = proxmox.nodes(target_node).qemu(new_vmid).status.start.post()
         wait_task(proxmox, target_node, upid)
 
     elif resource_type == "ct":
         _clone_ct(proxmox, target_node, template_vmid, new_vmid, name, storage)
-        _apply_size_ct(proxmox, target_node, new_vmid, size_cfg)
         _configure_ct_network(proxmox, target_node, new_vmid, bridge)
+        _apply_size_ct(proxmox, target_node, new_vmid, size_cfg)
         upid = proxmox.nodes(target_node).lxc(new_vmid).status.start.post()
         wait_task(proxmox, target_node, upid)
 
