@@ -244,16 +244,20 @@ def _apply_size_vm(
                 diff_gb = target_gb - current_gb
                 if diff_gb > 0:
                     logger.info("VM %d — resizing disk %s from %dG to %dG (+%dG)", vmid, disk_to_resize, current_gb, target_gb, diff_gb)
-                    proxmox.nodes(node).qemu(vmid).resize.put(
+                    result = proxmox.nodes(node).qemu(vmid).resize.put(
                         disk=disk_to_resize, size=f"+{diff_gb}G"
                     )
+                    if isinstance(result, str) and result.startswith("UPID:"):
+                        wait_task(proxmox, node, result)
                 else:
                     logger.info("VM %d — disk %s already %dG (target %dG), skipped", vmid, disk_to_resize, current_gb, target_gb)
             else:
                 logger.info("VM %d — resizing disk %s to absolute %dG", vmid, disk_to_resize, target_gb)
-                proxmox.nodes(node).qemu(vmid).resize.put(
+                result = proxmox.nodes(node).qemu(vmid).resize.put(
                     disk=disk_to_resize, size=f"{target_gb}G"
                 )
+                if isinstance(result, str) and result.startswith("UPID:"):
+                    wait_task(proxmox, node, result)
         else:
             logger.warning("VM %d — could not determine which disk to resize", vmid)
     except Exception as exc:
@@ -288,16 +292,20 @@ def _apply_size_ct(
             diff_gb = target_gb - current_gb
             if diff_gb > 0:
                 logger.info("CT %d — resizing rootfs from %dG to %dG (+%dG)", vmid, current_gb, target_gb, diff_gb)
-                proxmox.nodes(node).lxc(vmid).resize.put(
+                result = proxmox.nodes(node).lxc(vmid).resize.put(
                     disk="rootfs", size=f"+{diff_gb}G"
                 )
+                if isinstance(result, str) and result.startswith("UPID:"):
+                    wait_task(proxmox, node, result)
             else:
                 logger.info("CT %d — rootfs already %dG (target %dG), skipped", vmid, current_gb, target_gb)
         else:
             logger.info("CT %d — resizing rootfs to absolute %dG", vmid, target_gb)
-            proxmox.nodes(node).lxc(vmid).resize.put(
+            result = proxmox.nodes(node).lxc(vmid).resize.put(
                 disk="rootfs", size=f"{target_gb}G"
             )
+            if isinstance(result, str) and result.startswith("UPID:"):
+                wait_task(proxmox, node, result)
     except Exception as exc:
         logger.warning("CT %d — failed to resize rootfs: %s", vmid, exc)
 
