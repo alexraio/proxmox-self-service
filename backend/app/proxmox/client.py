@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import time
+import urllib3
 from functools import lru_cache
 
 from proxmoxer import ProxmoxAPI
 
 from app.config import settings
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 @lru_cache(maxsize=1)
