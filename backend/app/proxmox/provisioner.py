@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Tuple
 
 from proxmoxer import ProxmoxAPI
@@ -234,10 +235,25 @@ def _apply_size_vm(
                     break
 
         if disk_to_resize:
-            logger.info("VM %d — resizing disk %s to %dG", vmid, disk_to_resize, size_cfg["disk_gb"])
-            proxmox.nodes(node).qemu(vmid).resize.put(
-                disk=disk_to_resize, size=f"{size_cfg['disk_gb']}G"
-            )
+            disk_config = config.get(disk_to_resize, "")
+            match = re.search(r'size=(\d+)G', disk_config)
+            target_gb = size_cfg["disk_gb"]
+            
+            if match:
+                current_gb = int(match.group(1))
+                diff_gb = target_gb - current_gb
+                if diff_gb > 0:
+                    logger.info("VM %d — resizing disk %s from %dG to %dG (+%dG)", vmid, disk_to_resize, current_gb, target_gb, diff_gb)
+                    proxmox.nodes(node).qemu(vmid).resize.put(
+                        disk=disk_to_resize, size=f"+{diff_gb}G"
+                    )
+                else:
+                    logger.info("VM %d — disk %s already %dG (target %dG), skipped", vmid, disk_to_resize, current_gb, target_gb)
+            else:
+                logger.info("VM %d — resizing disk %s to absolute %dG", vmid, disk_to_resize, target_gb)
+                proxmox.nodes(node).qemu(vmid).resize.put(
+                    disk=disk_to_resize, size=f"{target_gb}G"
+                )
         else:
             logger.warning("VM %d — could not determine which disk to resize", vmid)
     except Exception as exc:
@@ -262,10 +278,26 @@ def _apply_size_ct(
     
     # 2. Update Disk size
     try:
-        logger.info("CT %d — resizing rootfs to %dG", vmid, size_cfg["disk_gb"])
-        proxmox.nodes(node).lxc(vmid).resize.put(
-            disk="rootfs", size=f"{size_cfg['disk_gb']}G"
-        )
+        config = proxmox.nodes(node).lxc(vmid).config.get()
+        disk_config = config.get("rootfs", "")
+        match = re.search(r'size=(\d+)G', disk_config)
+        target_gb = size_cfg["disk_gb"]
+        
+        if match:
+            current_gb = int(match.group(1))
+            diff_gb = target_gb - current_gb
+            if diff_gb > 0:
+                logger.info("CT %d — resizing rootfs from %dG to %dG (+%dG)", vmid, current_gb, target_gb, diff_gb)
+                proxmox.nodes(node).lxc(vmid).resize.put(
+                    disk="rootfs", size=f"+{diff_gb}G"
+                )
+            else:
+                logger.info("CT %d — rootfs already %dG (target %dG), skipped", vmid, current_gb, target_gb)
+        else:
+            logger.info("CT %d — resizing rootfs to absolute %dG", vmid, target_gb)
+            proxmox.nodes(node).lxc(vmid).resize.put(
+                disk="rootfs", size=f"{target_gb}G"
+            )
     except Exception as exc:
         logger.warning("CT %d — failed to resize rootfs: %s", vmid, exc)
 
