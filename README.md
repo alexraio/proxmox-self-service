@@ -126,3 +126,84 @@ The API token user needs at least:
 - 📊 Dashboard with auto-refresh (30s) and status badges
 - 🗑️ Delete with confirmation (stops + destroys on Proxmox)
 - 👑 Admin view: see all users' machines
+
+## Production Deployment
+
+This section describes how to deploy the application to a remote Docker server (e.g., via Portainer) using images built on your local machine.
+
+### 1. Build and Prepare Images (Cross-Platform)
+
+If you are building your images on a Mac (ARM/Apple Silicon) but your server is on an Intel/AMD (x86_64) machine, you **must** specify the target platform to avoid the `exec format error`.
+
+```bash
+# Sostituisci USERNAME con il tuo nome utente Docker Hub
+# Build for AMD64 (Standard Intel/AMD Servers)
+docker build --platform linux/amd64 -t USERNAME/proxmox-backend ./backend
+docker build --platform linux/amd64 -t USERNAME/proxmox-frontend ./frontend
+
+# Push to Docker Hub
+docker push USERNAME/proxmox-backend
+docker push USERNAME/proxmox-frontend
+```
+
+### 2. Portainer Deployment (Stacks)
+
+When deploying using Portainer Stacks, follow these best practices to avoid volume and environment file errors:
+
+#### A. Environment Variables
+Instead of using an external `.env` file (which Portainer won't find on the server filesystem), use the **Environment variables** section in the Portainer UI:
+1.  Copy the contents of your local `backend/.env`.
+2.  In Portainer, enable **Advanced mode** under Environment variables.
+3.  Paste the variables directly.
+4.  Remove the `env_file: .env` line from your Compose YAML.
+
+#### B. Configuration Files (YAML)
+Docker Compose relative paths (like `./config/templates.yaml`) often fail in Portainer. Use an **absolute path** on the server:
+1.  Create a directory on your server: `mkdir -p /opt/proxmox-portal/config/`.
+2.  Upload your `templates.yaml` there (e.g., using SFTP or a text editor via SSH).
+3.  Update the volume mount in your YAML to use that absolute path:
+    ```yaml
+    volumes:
+      - /opt/proxmox-portal/config/templates.yaml:/app/config/templates.yaml:ro
+    ```
+
+### 3. Production Compose Example (`docker-compose.prod.yml`)
+
+Use this optimized configuration for your remote server. Ensure you have already pushed your images as described in step 1.
+
+```yaml
+services:
+  backend:
+    image: USERNAME/proxmox-backend:latest
+    container_name: proxmox-portal-backend
+    restart: unless-stopped
+    volumes:
+      - db-data:/app/data
+      - /opt/proxmox-portal/config/templates.yaml:/app/config/templates.yaml:ro
+    ports:
+      - "8000:8000"
+
+  worker:
+    image: USERNAME/proxmox-backend:latest
+    container_name: proxmox-portal-worker
+    restart: unless-stopped
+    command: ["python", "-m", "cronjob.worker"]
+    volumes:
+      - db-data:/app/data
+      - /opt/proxmox-portal/config/templates.yaml:/app/config/templates.yaml:ro
+    depends_on:
+      - backend
+
+  frontend:
+    image: USERNAME/proxmox-frontend:latest
+    container_name: proxmox-portal-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  db-data:
+```
+
